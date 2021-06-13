@@ -1,0 +1,9 @@
+/target/
+.idea/**/workspace.xml
+.idea/**/misc.xml
+.idea/**/modules.xml
+.idea/**/city17.iml
+.idea/**/dataSources.local.xml
+bootstrap
+*.zip
+fcli

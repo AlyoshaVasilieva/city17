@@ -1,0 +1,6 @@
+target/
+.git/
+.hg/
+.idea/
+src/
+Cargo.*

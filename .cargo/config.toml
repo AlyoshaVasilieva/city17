@@ -1,0 +1,7 @@
+[build]
+#target = "x86_64-unknown-linux-musl"
+# Setting it in build.sh but not here allows cargo check to work on Windows.
+# Don't ask me about Mac OS.
+
+[target.x86_64-unknown-linux-musl]
+linker = "rust-lld"
