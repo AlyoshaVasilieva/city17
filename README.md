@@ -1,5 +1,5 @@
 ## City17
-A Rust serverless function to retrieve and relay a playlist for Twitch livestreams/VODs.
+A [Rust][rust] serverless function to retrieve and relay a playlist for Twitch livestreams/VODs.
 
 By running this in specific countries and using [a browser extension][ext]
 to redirect certain network requests to this function, Twitch will not display any ads.
@@ -7,14 +7,17 @@ to redirect certain network requests to this function, Twitch will not display a
 I don't provide any pre-built version of this, you have to set it up yourself.
 
 My rough estimate is that a few hundred to a few thousand users can be
-supported while staying inside the free tier's limits. If you're the only user
-you won't need to pay anything.
+supported while staying inside the free tier's limits, but I wouldn't recommend
+publicizing your function unless you actually understand how the pricing works.
+If you're the only user you won't need to pay anything. (Supposedly there's no
+free tier on outbound bandwidth, but my bill in May was 0.000000 USD.)
 
 You can probably run this as an actual server, but I haven't tested that because that
 costs money.
 
 <sup><sub>(I don't remember why I named this City17.)</sub></sup>
 
+[rust]: https://www.rust-lang.org
 [ext]: https://github.com/AlyoshaVasilieva/city17-ext
 
 ### Requirements
