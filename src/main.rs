@@ -141,7 +141,6 @@ fn process(var: Variables) -> Result<M3U8Responder, ErrorResponder> {
         get_access_token(&var).map_err(|e| ErrorResponder(e, "GQL"))?.data.playback_access_token;
     let url = var.get_url();
     let m3u8 = get_m3u8(&url, token).map_err(|e| ErrorResponder(e, "M3U"))?;
-    // TODO: Check that it starts with #EXTM3U? Not sure if Twitch will say 200 OK then give garbage
     Ok(M3U8Responder(m3u8))
 }
 
