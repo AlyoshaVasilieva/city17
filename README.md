@@ -55,10 +55,14 @@ Once `city17.zip` is built, see setup instructions below.
 
 Requires:
 
+* Rust [installed via rustup][rustup]
 * The `x86_64-unknown-linux-musl` target for Rust
+  (`rustup target add x86_64-unknown-linux-musl`)
 * `7za` (`p7zip-full` on Debian and Ubuntu, can modify script to use normal zip command)
 * `musl-gcc` (`musl-tools`)
 * Probably `build-essential`
+
+[rustup]: https://rustup.rs/
 
 ### Aliyun setup instructions
 
