@@ -172,6 +172,12 @@ impl<'a> Responder<'a, 'a> for M3U8Responder {
 /// Try `curl -s https://www.twitch.tv | tidy -q | grep '"Client-ID":"'`.
 const TWITCH_CLIENT: &str = "kimne78kx3ncx6brgo4mv6wki5h1ko";
 
+/// Asks Twitch for an access token using a randomly-generated ID.
+///
+/// Could *probably* also skip this step and use your real ID. Faster but less private, which
+/// may be a dealbreaker. Might be required server-side if you watch any subscriber-only VODs,
+/// but you wouldn't get ads anyway so the extension's fail-safe should prevent it from
+/// actually breaking client-side.
 fn get_access_token(var: &Variables) -> Result<AccessTokenResponse, Error> {
     let request = json!({
         "operationName": "PlaybackAccessToken",
@@ -202,6 +208,8 @@ fn get_access_token(var: &Variables) -> Result<AccessTokenResponse, Error> {
     resp.into_json().map_err(|e| e.into())
 }
 
+/// Holds an Error and the stage at which it occurred (GQL token or M3U playlist) and
+/// responds in JSON format for programmatic handling.
 pub(crate) struct ErrorResponder(Error, &'static str);
 
 impl fmt::Display for ErrorResponder {
@@ -284,6 +292,11 @@ pub(crate) struct AccessTokenResponse {
 
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct Data {
+    /// The signed access token itself.
+    ///
+    /// Can in fact be `null`, for example if the VOD ID is wrong or pointing to a deleted VOD.
+    /// Not modeled since we want to error out anyway. TODO: Model it so we can make a nicer error?
+    // Name depends on whether it's a livestream or a VOD.
     #[serde(rename = "streamPlaybackAccessToken", alias = "videoPlaybackAccessToken")]
     pub(crate) playback_access_token: PlaybackAccessToken,
 }
@@ -345,7 +358,7 @@ impl Variables {
         const BASE: &str = "https://usher.ttvnw.net/";
         let endpoint = match &self {
             Self::Channel(channel) => format!("api/channel/hls/{}.m3u8", channel),
-            Self::VOD(id) => format!("vod/{}", id),
+            Self::VOD(id) => format!("vod/{}.m3u8", id),
         };
         format!("{}{}", BASE, endpoint)
     }
