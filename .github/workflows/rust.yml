@@ -1,7 +1,7 @@
 # TODO: Run build.sh to test entire build stage.
 on: [push, pull_request]
 
-name: Continuous integration
+name: CI
 
 jobs:
   build:
