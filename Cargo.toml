@@ -1,6 +1,6 @@
 [package]
 name = "city17"
-version = "0.5.0"
+version = "0.5.1"
 authors = ["Malloc Voidstar <1284317+AlyoshaVasilieva@users.noreply.github.com>"]
 edition = "2018"
 resolver = "2"
@@ -14,7 +14,11 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rocket = "0.5.0-rc.1"
 once_cell = "1.8"
-ureq = { version = "2.1.1", default-features = false, features = ["json", "tls"] }
+
+[dependencies.reqwest]
+version = "0.11.4"
+default-features = false
+features = ["json", "rustls-tls"]
 
 [profile.release]
 codegen-units = 1

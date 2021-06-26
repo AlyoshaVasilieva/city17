@@ -1,13 +1,14 @@
 use std::env;
 use std::fmt;
 use std::io;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4, ToSocketAddrs};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::time::Duration;
 
 use once_cell::sync::Lazy;
 use pcg_rand::Pcg64;
 use rand::distributions::Alphanumeric;
 use rand::{Rng, SeedableRng};
+use reqwest::{Client, ClientBuilder};
 use rocket::http::{ContentType, Header, Status};
 use rocket::response::Responder;
 use rocket::shield::{Permission, Policy, Shield};
@@ -15,39 +16,32 @@ use rocket::{catch, catchers, get, launch, routes, Build, Config, Request, Respo
 use serde::Deserialize;
 use serde_json::json;
 use thiserror::Error;
-use ureq::{Agent, AgentBuilder, Request as URequest, Resolver};
 
 /// Connecting to a service blocked in China gets silently dropped, so we need a timeout.
 /// Around 10 seconds is the max time it takes to handle everything from Shanghai.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(7);
 
-static AGENT: Lazy<Agent> =
-    Lazy::new(|| AgentBuilder::new().resolver(HardResolver).timeout(REQUEST_TIMEOUT).build());
+static CLIENT: Lazy<Client> = Lazy::new(|| {
+    ClientBuilder::new().timeout(REQUEST_TIMEOUT).insert_resolve_overrides().build().unwrap()
+});
 
-/// A resolver that has a few IPs hard-coded. This is the sole reason I'm using ureq:
-/// sometimes the Chinese DNS won't resolve Twitch's domains. It's inconsistent enough
-/// that I could *probably* just retry it, but these IPs have been stable for years so
-/// save time and hardcode them.
-///
-/// Doing this appears to reduce latency variation even when the DNS is working.
-///
-/// This can also be done with, at minimum, hyper, but it's much more complicated since it's async.
-#[derive(Copy, Clone, Debug)]
-pub(crate) struct HardResolver;
+trait ClientBuilderExt {
+    fn insert_resolve_overrides(self) -> Self;
+}
 
-impl Resolver for HardResolver {
-    fn resolve(&self, netloc: &str) -> io::Result<Vec<SocketAddr>> {
-        match netloc {
-            "twitch.map.fastly.net:443" => Ok(vec![socket_addr_v4([151, 101, 110, 167], 443)]),
-            "usher.ttvnw.net:443" => Ok(vec![
-                socket_addr_v4([192, 108, 239, 254], 443),
-                socket_addr_v4([23, 160, 0, 254], 443),
-            ]),
-            // the fastly IP hasn't changed in the last three years
-            // one of the ttvnw IPs is also at least two years old
-            // if they start changing, make it part of the build process
-            rest => rest.to_socket_addrs().map(|i| i.collect()),
-        }
+impl ClientBuilderExt for ClientBuilder {
+    /// Resolver overrides with a few IPs hard-coded. Sometimes the Chinese DNS won't resolve
+    /// Twitch's domains. It's inconsistent enough that I could *probably* just retry it,
+    /// but these IPs have been stable for years so save time and hardcode them.
+    ///
+    /// Doing this appears to reduce latency variation even when the DNS is working.
+    fn insert_resolve_overrides(self) -> Self {
+        self.resolve("twitch.map.fastly.net", socket_addr_v4([151, 101, 110, 167], 443))
+            .resolve("usher.ttvnw.net", socket_addr_v4([23, 160, 0, 254], 443))
+        // the fastly IP hasn't changed in the last three years
+        // the ttvnw IP is also at least two years old
+        // if they start changing, make it part of the build process
+        // note alternative usher IP: [192, 108, 239, 254], 443
     }
 }
 
@@ -124,41 +118,51 @@ fn resolve(domain: &str) -> String {
 // XXX It would be nice if the endpoint was configurable somehow due to containing the service/fn name
 #[cfg_attr(feature = "azure", get("/api/live/<channel>"))]
 #[cfg_attr(feature = "aliyun", get("/2016-08-15/proxy/a/prx/invoke/live/<channel>"))]
-fn process_live(channel: &str) -> Result<M3U8Responder, ErrorResponder> {
-    process(Variables::Channel(channel.to_lowercase()))
+async fn process_live(channel: &str) -> Result<M3U8Responder, ErrorResponder> {
+    process(Variables::Channel(channel.to_lowercase())).await
 }
 
 #[cfg_attr(feature = "azure", get("/api/vod/<id>"))]
 #[cfg_attr(feature = "aliyun", get("/2016-08-15/proxy/a/prx/invoke/vod/<id>"))]
-fn process_vod(id: u64) -> Result<M3U8Responder, ErrorResponder> {
-    process(Variables::VOD(id.to_string()))
+async fn process_vod(id: u64) -> Result<M3U8Responder, ErrorResponder> {
+    process(Variables::VOD(id.to_string())).await
 }
 
-fn process(var: Variables) -> Result<M3U8Responder, ErrorResponder> {
-    // it'd be more proper to make this all properly async, but since this is serverless
-    // it's responding to exactly one person and doesn't matter
-    let token =
-        get_access_token(&var).map_err(|e| ErrorResponder(e, "GQL"))?.data.playback_access_token;
-    let url = var.get_url();
-    let m3u8 = get_m3u8(&url, token).map_err(|e| ErrorResponder(e, "M3U"))?;
+async fn process(var: Variables) -> Result<M3U8Responder, ErrorResponder> {
+    let token = get_access_token(&var).await.into_responder("GQL")?.data.playback_access_token;
+    let m3u8 = get_m3u8(&var.get_url(), token).await.into_responder("M3U")?;
     Ok(M3U8Responder(m3u8))
 }
 
-fn get_m3u8(url: &str, token: PlaybackAccessToken) -> Result<String, Error> {
+async fn get_m3u8(url: &str, token: PlaybackAccessToken) -> Result<String, Error> {
     let mut pcg = get_rng();
     let p = pcg.gen_range(0..=9_999_999).to_string();
-    token
-        .set_query(AGENT.get(url), &p, &generate_id().to_lowercase())
-        .call()?
-        .into_string()
+    CLIENT
+        .get(url)
+        .query(&token.gen_query(&p, &generate_id().to_lowercase()))
+        .send()
+        .await?
+        .text()
+        .await
         .map_err(|e| e.into())
+}
+
+trait ResultExt<T> {
+    /// Convert the Error in this Result (if present) into an ErrorResponder.
+    fn into_responder(self, stage: &'static str) -> Result<T, ErrorResponder>;
+}
+
+impl<T> ResultExt<T> for Result<T, Error> {
+    fn into_responder(self, stage: &'static str) -> Result<T, ErrorResponder> {
+        self.map_err(|e| ErrorResponder(e, stage))
+    }
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct M3U8Responder(pub(crate) String);
 
-impl<'a> Responder<'a, 'a> for M3U8Responder {
-    fn respond_to(self, _: &'a Request<'_>) -> rocket::response::Result<'a> {
+impl<'a> Responder<'a, 'static> for M3U8Responder {
+    fn respond_to(self, _: &'a Request<'_>) -> rocket::response::Result<'static> {
         // Aliyun doesn't allow Gzip
         Response::build()
             .header(Header::new("Cache-Control", "no-store"))
@@ -178,7 +182,7 @@ const TWITCH_CLIENT: &str = "kimne78kx3ncx6brgo4mv6wki5h1ko";
 /// may be a dealbreaker. Might be required server-side if you watch any subscriber-only VODs,
 /// but you wouldn't get ads anyway so the extension's fail-safe should prevent it from
 /// actually breaking client-side.
-fn get_access_token(var: &Variables) -> Result<AccessTokenResponse, Error> {
+async fn get_access_token(var: &Variables) -> Result<AccessTokenResponse, Error> {
     let request = json!({
         "operationName": "PlaybackAccessToken",
         "extensions": {
@@ -199,13 +203,17 @@ fn get_access_token(var: &Variables) -> Result<AccessTokenResponse, Error> {
     // Send a request to fastly (accessible in China)
     // and tell it we want to talk to Twitch's GQL API (blocked in China)
     // (with the hardcoded resolver I don't think this workaround is necessary anymore)
-    let resp = AGENT
+    CLIENT
         .post("https://twitch.map.fastly.net/gql")
-        .set("Host", "gql.twitch.tv")
-        .set("Client-ID", TWITCH_CLIENT)
-        .set("Device-ID", &id)
-        .send_json(request)?;
-    resp.into_json().map_err(|e| e.into())
+        .header("Host", "gql.twitch.tv")
+        .header("Client-ID", TWITCH_CLIENT)
+        .header("Device-ID", &id)
+        .json(&request)
+        .send()
+        .await?
+        .json()
+        .await
+        .map_err(|e| e.into())
 }
 
 /// Holds an Error and the stage at which it occurred (GQL token or M3U playlist) and
@@ -232,15 +240,14 @@ impl<'a> Responder<'a, 'a> for ErrorResponder {
     fn respond_to(self, _: &'a Request<'_>) -> rocket::response::Result<'a> {
         // codes are nonsense, just to make it slightly easier to distinguish them
         let code = match &self.0 {
-            Error::Http(e) => match e {
-                ureq::Error::Status(status, _) => *status,
-                ureq::Error::Transport(_t) => 510,
-            },
+            Error::Http(e) => {
+                if e.is_timeout() {
+                    504
+                } else {
+                    e.status().map(|s| s.as_u16()).unwrap_or(510)
+                }
+            }
             Error::Serde(_) => 501,
-            Error::IO(e) => match e.kind() {
-                io::ErrorKind::TimedOut => 504,
-                _ => 502,
-            },
         };
         let json = self.0.to_json(self.1).to_string();
         Response::build()
@@ -253,9 +260,7 @@ impl<'a> Responder<'a, 'a> for ErrorResponder {
 #[derive(Debug, Error)]
 pub(crate) enum Error {
     #[error("http error")]
-    Http(#[from] ureq::Error),
-    #[error("io error")]
-    IO(#[from] io::Error),
+    Http(#[from] reqwest::Error),
     #[error("serde error")]
     Serde(#[from] serde_json::Error),
 }
@@ -310,12 +315,6 @@ pub(crate) struct PlaybackAccessToken {
 }
 
 impl PlaybackAccessToken {
-    pub(crate) fn set_query(&self, req: URequest, p: &str, play_session_id: &str) -> URequest {
-        self.gen_query(p, play_session_id)
-            .iter()
-            .fold(req, |req, (name, value)| req.query(name, value))
-    }
-
     fn gen_query<'a>(&'a self, p: &'a str, play_session_id: &'a str) -> [(&str, &str); 12] {
         // XXX should probably send slightly different things for a VOD? it's working so I haven't
         //  bothered to check
