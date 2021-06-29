@@ -51,6 +51,8 @@ in China.
 If you're going to use Aliyun and do not intend to modify the code, download `city17.zip`
 from [the latest release][release] and proceed to the setup instructions.
 
+---
+
 Run `build.sh`. Cannot be truly built in Windows due to *ring*, but `cargo check` and `cargo build`
 work for checking the code. Ubuntu 20.04 via [WSL][wsl] works fine and is what I use.
 
