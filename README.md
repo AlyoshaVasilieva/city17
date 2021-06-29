@@ -48,6 +48,9 @@ in China.
 
 ### Building
 
+If you're going to use Aliyun and do not intend to modify the code, download `city17.zip`
+from [the latest release][release] and proceed to the setup instructions.
+
 Run `build.sh`. Cannot be truly built in Windows due to *ring*, but `cargo check` and `cargo build`
 work for checking the code. Ubuntu 20.04 via [WSL][wsl] works fine and is what I use.
 
@@ -62,6 +65,7 @@ Requires:
 * `musl-gcc` (`musl-tools`)
 * Probably `build-essential`
 
+[release]: https://github.com/AlyoshaVasilieva/city17/releases/latest
 [rustup]: https://rustup.rs/
 
 ### Aliyun setup instructions
