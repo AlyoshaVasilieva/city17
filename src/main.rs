@@ -22,7 +22,12 @@ use thiserror::Error;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(7);
 
 static CLIENT: Lazy<Client> = Lazy::new(|| {
-    ClientBuilder::new().timeout(REQUEST_TIMEOUT).insert_resolve_overrides().build().unwrap()
+    ClientBuilder::new()
+        .timeout(REQUEST_TIMEOUT)
+        .insert_resolve_overrides()
+        .danger_accept_invalid_hostnames(true) // TODO: Looser than I'd like.
+        .build()
+        .unwrap()
 });
 
 trait ClientBuilderExt {
@@ -202,7 +207,8 @@ async fn get_access_token(var: &Variables) -> Result<AccessTokenResponse, Error>
     let id = generate_id();
     // Send a request to fastly (accessible in China)
     // and tell it we want to talk to Twitch's GQL API (blocked in China)
-    // (with the hardcoded resolver I don't think this workaround is necessary anymore)
+    // This workaround is necessary even with the hard-coded resolver due to TLS SNI
+    // sending the hostname in the clear.
     CLIENT
         .post("https://twitch.map.fastly.net/gql")
         .header("Host", "gql.twitch.tv")
