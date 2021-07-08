@@ -147,6 +147,7 @@ async fn get_m3u8(url: &str, token: PlaybackAccessToken) -> Result<String, Error
         .query(&token.gen_query(&p, &generate_id().to_lowercase()))
         .send()
         .await?
+        .error_for_status()?
         .text()
         .await
         .map_err(|e| e.into())
@@ -217,6 +218,7 @@ async fn get_access_token(var: &Variables) -> Result<AccessTokenResponse, Error>
         .json(&request)
         .send()
         .await?
+        .error_for_status()?
         .json()
         .await
         .map_err(|e| e.into())
