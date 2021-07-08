@@ -88,7 +88,7 @@ Requires:
 For future updates of the function, use the Code tab's "Upload Zip File".
 (Or get [fcli][fcli], set it up, and run `update.sh` after `build.sh`)
 
-Under the Code tab, use the URL listed there to set up the browser extension.
+Under the Code tab, use the URL listed there to set up [the browser extension][ext].
 
 It looks like `https://################.cn-shanghai.fc.aliyuncs.com/2016-08-15/proxy/a/prx/`;
 you will need to add `invoke` to the end.
