@@ -42,8 +42,7 @@ impl ClientBuilderExt for ClientBuilder {
     /// Doing this appears to reduce latency variation even when the DNS is working.
     fn insert_resolve_overrides(self) -> Self {
         self.resolve("fastly.net", socket_addr_v4([151, 101, 110, 167], 443))
-            .resolve("usher.ttvnw.net", socket_addr_v4([192, 108, 239, 254], 443))
-        // Usher override is unused due to bypass.
+            .resolve("www.fastly.com", socket_addr_v4([192, 108, 239, 254], 443))
         // if these IPs start changing, make it part of the build process
         // note alternative usher IP: [23, 160, 0, 254], 443
     }
@@ -141,9 +140,10 @@ async fn process(var: Variables) -> Result<M3U8Responder, ErrorResponder> {
 async fn get_m3u8(url: &str, token: PlaybackAccessToken) -> Result<String, Error> {
     let mut pcg = get_rng();
     let p = pcg.gen_range(0..=9_999_999).to_string();
-    // Pretty sure the GFW thinks this is suspicious, but it's not 100% blocked.
+    // This isn't 100% unblocked but it seems to be more reliable than a bare IP.
+    // Also: I'm pretty sure Usher is being weirdly permissive, here.
     CLIENT
-        .get(url.replace("usher.ttvnw.net", "192.108.239.254"))
+        .get(url.replace("usher.ttvnw.net", "www.fastly.com"))
         .query(&token.gen_query(&p, &generate_id().to_lowercase()))
         .header("Host", "usher.ttvnw.net")
         .send()
