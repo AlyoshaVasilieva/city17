@@ -41,12 +41,11 @@ impl ClientBuilderExt for ClientBuilder {
     ///
     /// Doing this appears to reduce latency variation even when the DNS is working.
     fn insert_resolve_overrides(self) -> Self {
-        self.resolve("twitch.map.fastly.net", socket_addr_v4([151, 101, 110, 167], 443))
-            .resolve("usher.ttvnw.net", socket_addr_v4([23, 160, 0, 254], 443))
-        // the fastly IP hasn't changed in the last three years
-        // the ttvnw IP is also at least two years old
-        // if they start changing, make it part of the build process
-        // note alternative usher IP: [192, 108, 239, 254], 443
+        self.resolve("fastly.net", socket_addr_v4([151, 101, 110, 167], 443))
+            .resolve("usher.ttvnw.net", socket_addr_v4([192, 108, 239, 254], 443))
+        // Usher override is unused due to bypass.
+        // if these IPs start changing, make it part of the build process
+        // note alternative usher IP: [23, 160, 0, 254], 443
     }
 }
 
@@ -142,9 +141,11 @@ async fn process(var: Variables) -> Result<M3U8Responder, ErrorResponder> {
 async fn get_m3u8(url: &str, token: PlaybackAccessToken) -> Result<String, Error> {
     let mut pcg = get_rng();
     let p = pcg.gen_range(0..=9_999_999).to_string();
+    // Pretty sure the GFW thinks this is suspicious, but it's not 100% blocked.
     CLIENT
-        .get(url)
+        .get(url.replace("usher.ttvnw.net", "192.108.239.254"))
         .query(&token.gen_query(&p, &generate_id().to_lowercase()))
+        .header("Host", "usher.ttvnw.net")
         .send()
         .await?
         .error_for_status()?
@@ -211,7 +212,7 @@ async fn get_access_token(var: &Variables) -> Result<AccessTokenResponse, Error>
     // This workaround is necessary even with the hard-coded resolver due to TLS SNI
     // sending the hostname in the clear.
     CLIENT
-        .post("https://twitch.map.fastly.net/gql")
+        .post("https://fastly.net/gql")
         .header("Host", "gql.twitch.tv")
         .header("Client-ID", TWITCH_CLIENT)
         .header("Device-ID", &id)

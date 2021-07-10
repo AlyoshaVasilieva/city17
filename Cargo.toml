@@ -1,6 +1,6 @@
 [package]
 name = "city17"
-version = "0.5.2"
+version = "0.5.3"
 authors = ["Malloc Voidstar <1284317+AlyoshaVasilieva@users.noreply.github.com>"]
 edition = "2018"
 resolver = "2"
