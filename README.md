@@ -1,3 +1,8 @@
+I've switched to working on [luminous-ttv](https://github.com/AlyoshaVasilieva/luminous-ttv),
+which so far is both easier to use and more reliable.
+
+---
+
 ## City17
 A [Rust][rust] serverless function to retrieve and relay a playlist for Twitch livestreams/VODs.
 
